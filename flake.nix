@@ -19,9 +19,11 @@
           ocamlformat
           sops
         ] ++ (with ocamlPackages; [
-          ocaml-print-intf
           core
+          lambdasoup
+          ocaml-print-intf
           odoc
+          uri
           utop
         ]);
       };
