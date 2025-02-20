@@ -1,4 +1,4 @@
 (library
  (name yeh)
- (modules hey imap smtp)
+ (modules config hey imap smtp)
  (libraries core))
