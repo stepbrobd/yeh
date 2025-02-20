@@ -1,0 +1,10 @@
+keys:
+  age:
+    - &framework age102w4y6gsntvw93n590agqdg9v3tt8rs0x2kpunvu39jh6lyvdpeq7ct844
+    - &macbook age1cfd003wlk8w2hhtlwflyuc6lzwsswc48kpl9cafrg4kc5jp3u5rqckcf5l
+creation_rules:
+  - path_regex: .*
+    key_groups:
+      - age:
+          - *framework
+          - *macbook
