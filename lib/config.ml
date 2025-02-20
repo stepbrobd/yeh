@@ -49,7 +49,8 @@ module Config = struct
     end)
 
   type t =
-    { user : string
+    { domain : string
+    ; user : string
     ; pass : string
     ; token : string
     ; imap : Imap.t
@@ -59,7 +60,8 @@ module Config = struct
   let instance = ref None
 
   let of_env () =
-    { user = Sys.getenv_exn (prefix ^ "_USER")
+    { domain = Sys.getenv_exn (prefix ^ "_DOMAIN")
+    ; user = Sys.getenv_exn (prefix ^ "_USER")
     ; pass = Sys.getenv_exn (prefix ^ "_PASS")
     ; token = Sys.getenv_exn (prefix ^ "_TOKEN")
     ; imap = Imap.of_env ()
