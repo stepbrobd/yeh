@@ -19,6 +19,7 @@
           ocamlformat
           sops
         ] ++ (with ocamlPackages; [
+          ocaml-print-intf
           core
           odoc
           utop
