@@ -1,19 +1,43 @@
-- hey server renders all emails, they dont do client side fetching, except for
-  keeping a websocket connection open for new incoming emails
-- auth: copy the bearer token from browser, single tenant (use a separate
-  password for client side auth)
-- imap
-  - mailbox mapping, i.e. imbox -> inbox, collections -> folders, etc
-  - do html parsing, get message link, forward the raw email (from view
-    original) to clients
-  - keep websocket connection open for new incoming emails (or just poll every x
-    seconds?)
-- smtp
-  - simple state machine, allow concurrent sends
-  - recieve commands from smtp clients and relay to hey's web interface sending
-    logic (should be a simple http request)
+# YEH <-> HEY
 
-conventional commit:
+Roadmap:
+
+HEY server renders all emails, they dont do client side fetching, except for
+keeping a websocket connection open for new incoming emails and sending emails.
+
+Users/potential contributors: copy the session token (in cookie) from a browser
+with HEY logged in and export environment variable for testing and deployment. I
+plan to implement the IMAP/SMTP proxy to be a single tenant server, i.e. you'll
+need two secrets to run a deployment (one for accessing HEY, one to login from
+your email client).
+
+Roadmap:
+
+- [x] config parsing
+- [x] can fetch raw html from imbox, drafts, sent, etc
+  - [x] synchronously
+  - [ ] async request with lwt?
+- [ ] websocket connection for sending emails
+- [ ] smtp server (easy? state machine like)
+- [ ] imap server (hard? use sqlite to prevent fetching all emails over and
+      over)
+- [ ] nixos module
+
+IMAP:
+
+- mailbox mapping, i.e. imbox -> inbox, collections -> folders, etc
+- do html parsing, get message link, forward the raw email (from view original)
+  to clients
+- keep websocket connection open for new incoming emails (or just poll every x
+  seconds?)
+
+SMTP:
+
+- simple state machine, allow concurrent sends
+- recieve commands from smtp clients and relay to hey's web interface sending
+  logic (should be a simple http request)
+
+Conventional commit:
 
 - [bin|lib|doc|...]/<module>: regular code changes
 - git: git related
@@ -21,3 +45,11 @@ conventional commit:
 - ci: automation stuff
 - treewide: changes that affect multiple directories
 - misc: anything else
+
+## License
+
+Licensed under the [MIT License](license.txt), not sure if this is a violation
+of HEY's TOS, use at your own risk.
+
+I'll keep working on this and maintain this if they don't provide official
+IMAP/SMTP support (outrageous for a paid email service).

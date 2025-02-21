@@ -49,6 +49,7 @@
       };
 
       formatter = pkgs.writeShellScriptBin "formatter" ''
+        ${pkgs.deno}/bin/deno fmt readme.md
         ${pkgs.dune_3}/bin/dune fmt
         ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt .
       '';
