@@ -9,8 +9,24 @@
   outputs = inputs: inputs.parts.lib.mkFlake { inherit inputs; } {
     systems = import inputs.systems;
 
-    perSystem = { pkgs, ... }: {
-      _module.args.lib = with inputs; builtins // nixpkgs.lib // parts.lib;
+    perSystem = { pkgs, system, ... }: {
+      _module.args = {
+        lib = with inputs; builtins // nixpkgs.lib // parts.lib;
+        pkgs = import inputs.nixpkgs {
+          inherit system;
+          overlays = [
+            (final: prev: {
+              ocamlPackages = prev.ocamlPackages.overrideScope (_: prev': {
+                mirage-crypto-rng = prev'.mirage-crypto-rng.overrideAttrs (_: {
+                  # https://github.com/mirage/mirage-crypto/issues/216
+                  # https://github.com/nixos/nixpkgs/pull/356634
+                  doCheck = !(with final.stdenv; isDarwin && isAarch64);
+                });
+              });
+            })
+          ];
+        };
+      };
 
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
