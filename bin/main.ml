@@ -19,11 +19,12 @@ let () =
     end)
   in
   let api = H.Api.instance () in
-  printf "cable: %s\n" api.cable;
-  printf "imbox: %s\n" api.imbox;
-  printf "drafts: %s\n" api.topics.drafts;
-  printf "sent: %s\n" api.topics.sent;
-  printf "spam: %s\n" api.topics.spam;
-  printf "trash: %s\n" api.topics.trash;
-  printf "everything: %s\n" api.topics.everything
+  printf "cable: %s\n" (Uri.to_string api.cable);
+  printf "imbox: %s\n" (Uri.to_string api.imbox);
+  printf "drafts: %s\n" (Uri.to_string api.topics.drafts);
+  printf "sent: %s\n" (Uri.to_string api.topics.sent);
+  printf "spam: %s\n" (Uri.to_string api.topics.spam);
+  printf "trash: %s\n" (Uri.to_string api.topics.trash);
+  printf "everything: %s\n" (Uri.to_string api.topics.everything);
+  api.invoke api.topics.everything |> Soup.to_string |> print_endline
 ;;

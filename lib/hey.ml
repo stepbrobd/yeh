@@ -8,50 +8,78 @@ module Hey (Args : sig
 struct
   module Api = struct
     let mk ?(protocol = Protocol.HTTPS) path =
-      Printf.sprintf "%s://%s%s" (Protocol.to_string protocol) Args.domain path
+      Uri.of_string
+        (Printf.sprintf "%s://%s%s" (Protocol.to_string protocol) Args.domain path)
     ;;
 
-    let invoke uri ?(verb = Protocol.HTTPS.GET) ?(body = "") =
-      match Protocol.of_string uri with
-      | Some Protocol.HTTPS -> ""
-      | Some Protocol.WSS -> ""
-      | _ -> failwith "unsupported"
+    let invoke ?(verb = Protocol.HTTPS.GET) ?(body = "") uri =
+      match Protocol.of_uri uri with
+      | Some Protocol.HTTPS ->
+        let resp, body =
+          Cohttp_lwt_unix.Client.call
+            ~headers:
+              (Cohttp.Header.init_with
+                 "Cookie"
+                 (Printf.sprintf "session_token=%s" Args.token))
+            (Cohttp.Code.method_of_string (Protocol.HTTPS.to_string verb))
+            uri
+            ?body:
+              (if String.is_empty body
+               then None
+               else Some (Cohttp_lwt.Body.of_string body))
+          |> Lwt_main.run
+        in
+        let code = Cohttp.Response.status resp |> Cohttp.Code.code_of_status in
+        if code >= 200 && code < 300
+        then Cohttp_lwt.Body.to_string body |> Lwt_main.run |> Soup.parse
+        else failwithf "request failed with status %d" code ()
+      | Some Protocol.WSS -> failwith "wss not implemented"
+      | _ -> failwith "unsupported protocol"
     ;;
 
     module Topics = struct
-      (** [mk t] creates an endpoint for a topic where [t] can be either a named topic or an email id *)
-      let topic t = mk (Printf.sprintf "/topics/%s" t)
+      (** [topic t] creates an endpoint for a topic
+          @param t either [`Name string] for named topics or [`Id int64] for msg id
+          @return uri
+      *)
+      let topic = function
+        | `Name t -> mk (Printf.sprintf "/topics/%s" t)
+        | `Id t -> mk (Printf.sprintf "/topics/%Ld" t)
+      ;;
 
-      (** [attachments t] creates an endpoint for all attachments relevant to an email with id [t] *)
-      let attachments t = mk (Printf.sprintf "/topics/%s/attachments" t)
+      (** [attachments id] creates an endpoint for email attachments
+          @param id msg id
+          @return uri
+      *)
+      let attachments id = mk (Printf.sprintf "/topics/%Ld/attachments" id)
 
       type t =
-        { drafts : string
-        ; sent : string
-        ; spam : string
-        ; trash : string
-        ; everything : string
-        ; topic : string -> string
-        ; attachments : string -> string
+        { drafts : Uri.t
+        ; sent : Uri.t
+        ; spam : Uri.t
+        ; trash : Uri.t
+        ; everything : Uri.t
+        ; topic : int64 -> Uri.t
+        ; attachments : int64 -> Uri.t
         }
 
       let create () =
-        { drafts = topic "drafts"
-        ; sent = topic "sent"
-        ; spam = topic "spam"
-        ; trash = topic "trash"
-        ; everything = topic "everything"
-        ; topic
+        { drafts = topic (`Name "drafts")
+        ; sent = topic (`Name "sent")
+        ; spam = topic (`Name "spam")
+        ; trash = topic (`Name "trash")
+        ; everything = topic (`Name "everything")
+        ; topic = (fun id -> topic (`Id id))
         ; attachments
         }
       ;;
     end
 
     type t =
-      { cable : string
-      ; imbox : string
+      { cable : Uri.t
+      ; imbox : Uri.t
       ; topics : Topics.t
-      ; invoke : string -> ?verb:Protocol.HTTPS.t -> ?body:string -> string
+      ; invoke : ?verb:Protocol.HTTPS.t -> ?body:string -> Uri.t -> Soup.soup Soup.node
       }
 
     let instance = ref None

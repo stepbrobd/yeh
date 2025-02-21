@@ -34,12 +34,14 @@ module Protocol = struct
     | WSS -> "wss"
   ;;
 
-  let of_string uri =
-    match Uri.scheme (Uri.of_string uri) with
+  let of_uri uri =
+    match Uri.scheme uri with
     | Some "https" -> Some HTTPS
     | Some "imap" -> Some IMAP
     | Some "smtp" -> Some SMTP
     | Some "wss" -> Some WSS
     | _ -> None
   ;;
+
+  let of_string str = of_uri (Uri.of_string str)
 end

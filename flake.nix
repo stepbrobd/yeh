@@ -19,8 +19,12 @@
           ocamlformat
           sops
         ] ++ (with ocamlPackages; [
+          cohttp
+          cohttp-lwt
+          cohttp-lwt-unix
           core
           lambdasoup
+          lwt
           ocaml-print-intf
           odoc
           uri
