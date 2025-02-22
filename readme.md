@@ -46,6 +46,17 @@ Conventional commit:
 - treewide: changes that affect multiple directories
 - misc: anything else
 
+## Notes
+
+After getting HTML from Imbox or other top level folders (under /topics/*),
+`#main-content > div > div > div > section` contains a list of all summary cards
+of emails in article tags (avatar, subject, snippet, time), and an a tag at the
+very end containing the link to next page
+(`#main-content > div > div > div > section > a`)
+
+`https://app.hey.com/messages/<id>.text` have the full email content (with
+headers)
+
 ## License
 
 Licensed under the [MIT License](license.txt), not sure if this is a violation
