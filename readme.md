@@ -57,6 +57,10 @@ very end containing the link to next page
 `https://app.hey.com/messages/<id>.text` have the full email content (with
 headers)
 
+Maybe read from response header
+(`x-ratelimit: {"name":"General","period":60,"limit":1000,"remaining":998,"until":"2025-02-22T04:22:00Z"}`)
+to prevent getting rate limited?
+
 ## License
 
 Licensed under the [MIT License](license.txt), not sure if this is a violation
