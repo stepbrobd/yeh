@@ -6,6 +6,67 @@ module Hey (Args : sig
     val token : string
   end) =
 struct
+  (* merge with email *)
+  module Summary = struct
+    type t =
+      { id : int64
+      ; subject : string
+      ; received : Ptime.t
+      }
+
+    let to_string { id; subject; received } =
+      Printf.sprintf "%Ld %s %s" id (Ptime.to_rfc3339 received) subject
+    ;;
+
+    (* root must the result of an invoke *)
+    let parse root =
+      let once article =
+        try
+          let id =
+            article
+            |> Soup.select_one "a.posting__link"
+            |> Option.bind ~f:(Soup.attribute "href")
+            |> Option.bind ~f:(fun x -> String.split ~on:'/' x |> List.last)
+            |> Option.bind ~f:(fun x -> Int64.of_string x |> Option.some)
+            |> Option.value_exn
+          in
+          let subject =
+            article
+            |> Soup.select_one "span.posting__title"
+            |> Option.map ~f:(fun span -> Soup.texts span |> String.concat)
+            |> Option.value_exn
+            |> String.strip
+          in
+          let received =
+            article
+            |> Soup.select_one "time"
+            |> Option.bind ~f:(Soup.attribute "datetime")
+            |> Option.bind ~f:(fun x -> Ptime.of_rfc3339 x |> Result.ok)
+            |> Option.value_exn
+            |> fst3
+          in
+          { id; subject; received }
+        with
+        | _ -> failwith "cannot parse email"
+      in
+      Soup.select "article.posting" root |> Soup.to_list |> List.map ~f:once
+    ;;
+  end
+
+  module Email = struct
+    (* currently no plan for attachments *)
+    type t =
+      { id : int64
+      ; time : Ptime.t option
+      ; subject : string option
+      ; sender : string option
+      ; receiver : string list option
+      ; cc : string list option
+      ; bcc : string list option
+      ; body : string option
+      }
+  end
+
   module Api = struct
     let mk ?(protocol = Protocol.HTTPS) path =
       Uri.of_string
@@ -35,6 +96,13 @@ struct
         else failwithf "request failed with status %d" code ()
       | Some Protocol.WSS -> failwith "wss not implemented"
       | _ -> failwith "unsupported protocol"
+    ;;
+
+    let next root =
+      root
+      |> Soup.select_one "a.pagination-link[data-pagination-target='nextPageLink']"
+      |> Option.bind ~f:(Soup.attribute "href")
+      |> Option.map ~f:(fun path -> mk path)
     ;;
 
     module Topics = struct
@@ -80,6 +148,7 @@ struct
       ; imbox : Uri.t
       ; topics : Topics.t
       ; invoke : ?verb:Protocol.HTTPS.t -> ?body:string -> Uri.t -> Soup.soup Soup.node
+      ; next : Soup.soup Soup.node -> Uri.t option
       }
 
     let instance = ref None
@@ -89,6 +158,7 @@ struct
       ; imbox = mk "/imbox"
       ; topics = Topics.create ()
       ; invoke
+      ; next
       }
     ;;
 
