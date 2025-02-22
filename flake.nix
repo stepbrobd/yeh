@@ -41,6 +41,7 @@
           core
           lambdasoup
           lwt
+          mrmime
           ocaml-print-intf
           odoc
           ptime

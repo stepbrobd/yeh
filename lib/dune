@@ -9,5 +9,6 @@
   lambdasoup
   lwt
   lwt.unix
+  mrmime
   ptime
   uri))
