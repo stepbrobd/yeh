@@ -43,6 +43,7 @@
           lwt
           ocaml-print-intf
           odoc
+          ptime
           uri
           utop
         ]);
