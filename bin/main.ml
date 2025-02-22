@@ -25,20 +25,17 @@ let () =
   printf "spam: %s\n" (Uri.to_string api.topics.spam);
   printf "trash: %s\n" (Uri.to_string api.topics.trash);
   printf "everything: %s\n\n" (Uri.to_string api.topics.everything); *)
-  let print root =
-    root
-    |> Hey.Summary.parse
-    |> List.map ~f:Hey.Summary.to_string
-    |> List.iter ~f:(printf "%s\n")
+  let all topic =
+    let rec loop acc = function
+      | None -> acc
+      | Some uri ->
+        let soup = Hey.invoke uri |> Soup.parse in
+        let next = Hey.Topic.next_page soup in
+        loop (acc @ Hey.Topic.parse_many_exn soup) next
+    in
+    let fst = Hey.invoke topic |> Soup.parse in
+    let nxt = Hey.Topic.next_page fst in
+    loop (Hey.Topic.parse_many_exn fst) nxt
   in
-  let first = api.invoke api.topics.everything in
-  let rec loop root =
-    let next = api.next root in
-    match next with
-    | Some uri ->
-      print root;
-      loop (api.invoke uri)
-    | None -> print root
-  in
-  loop first
+  all api.imbox |> List.iter ~f:(fun t -> printf "%s\n" (Hey.Topic.to_string t))
 ;;
