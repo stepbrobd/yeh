@@ -6,19 +6,28 @@ module Hey (Args : sig
     val token : string
   end) =
 struct
-  module Message = struct
-    (* currently no plan for attachments *)
-    type t =
-      { id : int64
-      ; time : Ptime.t option
-      ; subject : string option
-      ; sender : string option
-      ; receiver : string list option
-      ; cc : string list option
-      ; bcc : string list option
-      ; body : string option
-      }
-  end
+  let invoke ?(verb = Protocol.HTTPS.GET) ?(body = "") uri =
+    match Protocol.of_uri uri with
+    | Some Protocol.HTTPS ->
+      let resp, body =
+        Cohttp_lwt_unix.Client.call
+          ~headers:
+            (Cohttp.Header.init_with
+               "Cookie"
+               (Printf.sprintf "session_token=%s" Args.token))
+          (Cohttp.Code.method_of_string (Protocol.HTTPS.to_string verb))
+          uri
+          ?body:
+            (if String.is_empty body then None else Some (Cohttp_lwt.Body.of_string body))
+        |> Lwt_main.run
+      in
+      let code = Cohttp.Response.status resp |> Cohttp.Code.code_of_status in
+      if code >= 200 && code < 300
+      then Cohttp_lwt.Body.to_string body |> Lwt_main.run
+      else failwithf "request failed with status %d" code ()
+    | Some Protocol.WSS -> failwith "wss not implemented"
+    | _ -> failwith "unsupported protocol"
+  ;;
 
   module Api = struct
     let mk ?(protocol = Protocol.HTTPS) path =
@@ -113,7 +122,7 @@ struct
         @param soup a soup node of an article tag
         @return parsed topic
     *)
-    let parse_one_exn soup =
+    let parse_topic_exn soup =
       try
         let id =
           soup
@@ -147,42 +156,74 @@ struct
         @param soup root of the parsed html
         @return a list of parsed topics
         *)
-    let parse_many_exn soup =
-      Soup.select "article.posting" soup |> Soup.to_list |> List.map ~f:parse_one_exn
+    let parse_topics_exn soup =
+      Soup.select "article.posting" soup |> Soup.to_list |> List.map ~f:parse_topic_exn
     ;;
 
-    (** [next_page soup] return the next page uri if exists
+    let parse_entry_exn soup =
+      soup
+      |> Soup.attribute "data-entry-id"
+      |> Option.bind ~f:Int64.of_string_opt
+      |> Option.value_exn
+    ;;
+
+    let parse_entries_exn soup =
+      Soup.select "article.entry" soup |> Soup.to_list |> List.map ~f:parse_entry_exn
+    ;;
+
+    (** [next soup] return the next pagination uri if exists
         @param soup root of the parsed html
         @return uri option
         *)
-    let next_page soup =
+    let next soup =
       soup
       |> Soup.select_one "a.pagination-link[data-pagination-target='nextPageLink']"
       |> Option.bind ~f:(Soup.attribute "href")
       |> Option.map ~f:(fun path -> Api.mk path)
     ;;
+
+    let all_topics topic =
+      let rec aux acc = function
+        | None -> acc
+        | Some uri ->
+          let soup = invoke uri |> Soup.parse in
+          let next = next soup in
+          aux (acc @ parse_topics_exn soup) next
+      in
+      let fst = invoke topic |> Soup.parse in
+      let nxt = next fst in
+      aux (parse_topics_exn fst) nxt
+    ;;
+
+    let all_entries topic =
+      let rec aux acc = function
+        | None -> acc
+        | Some uri ->
+          let soup = invoke uri |> Soup.parse in
+          let next = next soup in
+          (match parse_entries_exn soup with
+           | [] -> acc
+           | entries -> aux (acc @ entries) next)
+      in
+      let soup =
+        Api.mk (Printf.sprintf "/topics/%Ld/entries" topic) |> invoke |> Soup.parse
+      in
+      let next = next soup in
+      aux (parse_entries_exn soup) next
+    ;;
   end
 
-  let invoke ?(verb = Protocol.HTTPS.GET) ?(body = "") uri =
-    match Protocol.of_uri uri with
-    | Some Protocol.HTTPS ->
-      let resp, body =
-        Cohttp_lwt_unix.Client.call
-          ~headers:
-            (Cohttp.Header.init_with
-               "Cookie"
-               (Printf.sprintf "session_token=%s" Args.token))
-          (Cohttp.Code.method_of_string (Protocol.HTTPS.to_string verb))
-          uri
-          ?body:
-            (if String.is_empty body then None else Some (Cohttp_lwt.Body.of_string body))
-        |> Lwt_main.run
-      in
-      let code = Cohttp.Response.status resp |> Cohttp.Code.code_of_status in
-      if code >= 200 && code < 300
-      then Cohttp_lwt.Body.to_string body |> Lwt_main.run
-      else failwithf "request failed with status %d" code ()
-    | Some Protocol.WSS -> failwith "wss not implemented"
-    | _ -> failwith "unsupported protocol"
-  ;;
+  module Entry = struct
+    (* currently no plan for attachments *)
+    type t =
+      { id : int64
+      ; time : Ptime.t option
+      ; subject : string option
+      ; sender : string option
+      ; receiver : string list option
+      ; cc : string list option
+      ; bcc : string list option
+      ; body : string option
+      }
+  end
 end

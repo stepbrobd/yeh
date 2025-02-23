@@ -25,17 +25,7 @@ let () =
   printf "spam: %s\n" (Uri.to_string api.topics.spam);
   printf "trash: %s\n" (Uri.to_string api.topics.trash);
   printf "everything: %s\n\n" (Uri.to_string api.topics.everything); *)
-  let all topic =
-    let rec loop acc = function
-      | None -> acc
-      | Some uri ->
-        let soup = Hey.invoke uri |> Soup.parse in
-        let next = Hey.Topic.next_page soup in
-        loop (acc @ Hey.Topic.parse_many_exn soup) next
-    in
-    let fst = Hey.invoke topic |> Soup.parse in
-    let nxt = Hey.Topic.next_page fst in
-    loop (Hey.Topic.parse_many_exn fst) nxt
-  in
-  all api.imbox |> List.iter ~f:(fun t -> printf "%s\n" (Hey.Topic.to_string t))
+  Hey.Topic.all_topics api.imbox
+  |> List.iter ~f:(fun (x : Hey.Topic.t) ->
+    List.iter ~f:(printf "%Ld\n") (Hey.Topic.all_entries x.id))
 ;;
