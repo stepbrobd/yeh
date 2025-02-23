@@ -35,6 +35,7 @@
           ocamlformat
           sops
         ] ++ (with ocamlPackages; [
+          angstrom
           cohttp
           cohttp-lwt
           cohttp-lwt-unix

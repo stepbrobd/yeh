@@ -2,6 +2,7 @@
  (name yeh)
  (modules config hey imap protocol smtp)
  (libraries
+  angstrom
   cohttp
   cohttp-lwt
   cohttp-lwt-unix
