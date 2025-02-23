@@ -65,6 +65,9 @@ Emails in screener will be put into Everything, no need to parse separately.
 
 Topics are email threads, entries are emails in thread, different IDs.
 
+Is parsing even needed after getting `<domain>/messages/<id>.text`? Directly
+feed to IMAP downstream? Attachments are included in multipart?
+
 ## License
 
 Licensed under the [MIT License](license.txt), not sure if this is a violation
