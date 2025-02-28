@@ -3,7 +3,8 @@
 Roadmap:
 
 HEY server renders all emails, they dont do client side fetching, except for
-keeping a websocket connection open for new incoming emails and sending emails.
+~~keeping a websocket connection open for new incoming emails and sending
+emails~~.
 
 Users/potential contributors: copy the session token (in cookie) from a browser
 with HEY logged in and export environment variable for testing and deployment. I
@@ -17,7 +18,7 @@ Roadmap:
 - [x] can fetch raw html from imbox, drafts, sent, etc
   - [x] synchronously
   - [ ] async request with lwt?
-- [ ] websocket connection for sending emails
+- [ ] ~~websocket connection for sending emails~~
 - [ ] smtp server (easy? state machine like)
 - [ ] imap server (hard? use sqlite to prevent fetching all emails over and
       over)
@@ -28,8 +29,8 @@ IMAP:
 - mailbox mapping, i.e. imbox -> inbox, collections -> folders, etc
 - do html parsing, get message link, forward the raw email (from view original)
   to clients
-- keep websocket connection open for new incoming emails (or just poll every x
-  seconds?)
+- ~~keep websocket connection open for new incoming emails (or just poll every x
+  seconds?)~~
 
 SMTP:
 
@@ -77,6 +78,8 @@ To send email, need 2 CSRF tokens and HEY session token:
 For the 2 CSRF tokens, one must be in the cookie, another in request header
 (X-CSRF-Token), I assume the one in header is from Cloudflare and the one in
 cookie is from HEY.
+
+Don't need websokect for sending, and also don't need to check emails, just poll
 
 ## License
 
