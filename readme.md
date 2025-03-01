@@ -69,11 +69,33 @@ Topics are email threads, entries are emails in thread, different IDs.
 Is parsing even needed after getting `<domain>/messages/<id>.text`? Directly
 feed to IMAP downstream? Attachments are included in multipart?
 
-To send email, need 2 CSRF tokens and HEY session token:
+To send email, need 2 CSRF tokens and HEY session token, and POST the form data to submission endpoint:
 
-1. POST to `https://app.hey.com/messages` with form data to get new email's ID
-2. POST to `https://app.hey.com/messages/<id>` form data (including sender ID,
-   sender address, addressed, subject, content, etc, and `commit=Send email`)
+```
+# sender info
+acting_sender_id=<HEY account ID>
+acting_sender_email=<local part>@hey.com
+
+# recipient info (if multiple, repeat the key)
+entry[addressed][directly][]=local@example.com
+entry[addressed][copied][]=local@example.com
+entry[addressed][blindcopied][]=local@example.com
+
+# email
+message[subject]=Test
+message[content]=<div></div>
+
+# metadata
+_method=post
+commit=Send email
+autodraft=false
+entry[status]=drafted
+entry[scheduled_delivery]=false
+entry[scheduled_delivery_at_date]=<YYYY-MM-DD>
+entry[scheduled_delivery_at_hour]=<0-24>
+entry[scheduled_bubble_up]=false
+entry[scheduled_bubble_up_on]=<YYYY-MM-DD>
+```
 
 For the 2 CSRF tokens, one must be in the cookie, another in request header
 (X-CSRF-Token), I assume the one in header is from Cloudflare and the one in
