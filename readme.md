@@ -69,7 +69,8 @@ Topics are email threads, entries are emails in thread, different IDs.
 Is parsing even needed after getting `<domain>/messages/<id>.text`? Directly
 feed to IMAP downstream? Attachments are included in multipart?
 
-To send email, need 2 CSRF tokens and HEY session token, and POST the form data to submission endpoint:
+To send email, need 2 CSRF tokens and HEY session token, and POST the form data
+to submission endpoint:
 
 ```
 # sender info
@@ -95,6 +96,26 @@ entry[scheduled_delivery_at_date]=<YYYY-MM-DD>
 entry[scheduled_delivery_at_hour]=<0-24>
 entry[scheduled_bubble_up]=false
 entry[scheduled_bubble_up_on]=<YYYY-MM-DD>
+```
+
+```sh
+cookie=$(sops decrypt --extract '["cookie"]' .env.yaml)
+csrf=$(sops decrypt --extract '["csrf"]' .env.yaml)
+asid=$(sops decrypt --extract '["asid"]' .env.yaml)
+user=$(sops decrypt --extract '["user"]' .env.yaml)
+
+curl -i "https://app.hey.com/messages" \
+  -X 'POST' \
+  -H 'Content-Type: application/x-www-form-urlencoded;charset=UTF-8' \
+  -H "Cookie: $cookie" \
+  -H "X-CSRF-Token: $csrf" \
+  --data-urlencode "acting_sender_id=$asid" \
+  --data-urlencode "acting_sender_email=$user" \
+  --data-urlencode 'entry[addressed][directly][]=<test email address>' \
+  --data-urlencode 'message[subject]=test subject' \
+  --data-urlencode 'message[content]=sup this is some test content' \
+  --data-urlencode '_method=POST' \
+  --data-urlencode 'commit=Send email'
 ```
 
 For the 2 CSRF tokens, one must be in the cookie, another in request header
