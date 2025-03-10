@@ -52,7 +52,9 @@ module Config = struct
     { domain : string
     ; user : string
     ; pass : string
-    ; token : string
+    ; asid : int
+    ; csrf : string
+    ; cookie : string
     ; imap : Imap.t
     ; smtp : Smtp.t
     }
@@ -63,7 +65,9 @@ module Config = struct
     { domain = Sys.getenv_exn (prefix ^ "_DOMAIN")
     ; user = Sys.getenv_exn (prefix ^ "_USER")
     ; pass = Sys.getenv_exn (prefix ^ "_PASS")
-    ; token = Sys.getenv_exn (prefix ^ "_TOKEN")
+    ; asid = Sys.getenv_exn (prefix ^ "_ASID") |> Int.of_string
+    ; csrf = Sys.getenv_exn (prefix ^ "_CSRF")
+    ; cookie = Sys.getenv_exn (prefix ^ "_COOKIE")
     ; imap = Imap.of_env ()
     ; smtp = Smtp.of_env ()
     }

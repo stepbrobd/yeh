@@ -2,8 +2,7 @@ open! Core
 module Protocol = Protocol.Protocol
 
 module Hey (Args : sig
-    val domain : string
-    val token : string
+    val cfg : Config.Config.t
   end) =
 struct
   let invoke ?(verb = Protocol.HTTPS.GET) ?(body = "") uri =
@@ -11,10 +10,7 @@ struct
     | Some Protocol.HTTPS ->
       let resp, body =
         Cohttp_lwt_unix.Client.call
-          ~headers:
-            (Cohttp.Header.init_with
-               "Cookie"
-               (Printf.sprintf "session_token=%s" Args.token))
+          ~headers:(Cohttp.Header.init_with "Cookie" Args.cfg.cookie)
           (Cohttp.Code.method_of_string (Protocol.HTTPS.to_string verb))
           uri
           ?body:
@@ -32,7 +28,7 @@ struct
   module Api = struct
     let mk ?(protocol = Protocol.HTTPS) path =
       Uri.of_string
-        (Printf.sprintf "%s://%s%s" (Protocol.to_string protocol) Args.domain path)
+        (Printf.sprintf "%s://%s%s" (Protocol.to_string protocol) Args.cfg.domain path)
     ;;
 
     module Topic = struct
@@ -66,16 +62,24 @@ struct
     end
 
     type t =
-      { cable : Uri.t
-      ; imbox : Uri.t
+      { imbox : Uri.t
+      ; the_feed : Uri.t
+      ; paper_trail : Uri.t
+      ; reply_later : Uri.t
+      ; set_aside : Uri.t
+      ; bubble_up : Uri.t
       ; topics : Topic.t
       }
 
     let instance = ref None
 
     let create () =
-      { cable = mk ~protocol:Protocol.WSS "/cable"
-      ; imbox = mk "/imbox"
+      { imbox = mk "/imbox"
+      ; the_feed = mk "/feedbox"
+      ; reply_later = mk "/reply_later"
+      ; paper_trail = mk "/paper_trail"
+      ; set_aside = mk "/set_aside"
+      ; bubble_up = mk "/bubble_up"
       ; topics = Topic.create ()
       }
     ;;
@@ -109,13 +113,13 @@ struct
     (** [messages id] return a list of all raw messages (email) URIs in a topic (thread)
           @param id msg id
           @return uri
-      *)
+    *)
     let messages id = [] (* TODO *)
 
     (** [attachments id] return a list of all attachment URIs in a topic
           @param id topic id
           @return uri
-      *)
+    *)
     let attachments id = [] (* TODO *)
 
     (** [parse_one soup] parse a single topic from an article tag, throws if failed
@@ -155,7 +159,7 @@ struct
     (** [parse_many soup] return a list of all topics from a parsed html, throws if failed
         @param soup root of the parsed html
         @return a list of parsed topics
-        *)
+    *)
     let parse_topics_exn soup =
       Soup.select "article.posting" soup |> Soup.to_list |> List.map ~f:parse_topic_exn
     ;;
@@ -174,7 +178,7 @@ struct
     (** [next soup] return the next pagination uri if exists
         @param soup root of the parsed html
         @return uri option
-        *)
+    *)
     let next soup =
       soup
       |> Soup.select_one "a.pagination-link[data-pagination-target='nextPageLink']"
@@ -214,16 +218,15 @@ struct
   end
 
   module Entry = struct
-    (* currently no plan for attachments *)
     type t =
       { id : int64
       ; time : Ptime.t option
-      ; subject : string option
       ; sender : string option
-      ; receiver : string list option
-      ; cc : string list option
-      ; bcc : string list option
-      ; body : string option
+      ; directly : string list option
+      ; copied : string list option
+      ; blindcopied : string list option
+      ; subject : string option
+      ; content : string option
       }
   end
 end
