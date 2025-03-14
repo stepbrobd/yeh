@@ -21,7 +21,6 @@ struct
       if code >= 200 && code < 300
       then Cohttp_lwt.Body.to_string body |> Lwt_main.run
       else failwithf "request failed with status %d" code ()
-    | Some Protocol.WSS -> failwith "wss not implemented"
     | _ -> failwith "unsupported protocol"
   ;;
 
@@ -228,5 +227,59 @@ struct
       ; subject : string option
       ; content : string option
       }
+
+    let send e =
+      let fire ~subject ~content ~directly ~copied ~blindcopied =
+        let uri = Api.mk "/messages" in
+        let build_recipients_data prefix emails =
+          match emails with
+          | [] -> []
+          | emails ->
+            List.map emails ~f:(fun email ->
+              Printf.sprintf "entry[addressed][%s][]=%s" prefix (Uri.pct_encode email))
+        in
+        let directly_data = build_recipients_data "directly" directly in
+        let copied_data = build_recipients_data "copied" copied in
+        let blindcopied_data = build_recipients_data "blindcopied" blindcopied in
+        let form_data =
+          String.concat
+            ~sep:"&"
+            ([ Printf.sprintf "acting_sender_id=%d" Args.cfg.asid
+             ; Printf.sprintf "acting_sender_email=%s" (Uri.pct_encode Args.cfg.user)
+             ; Printf.sprintf "message[subject]=%s" (Uri.pct_encode subject)
+             ; Printf.sprintf "message[content]=%s" (Uri.pct_encode content)
+             ; "_method=POST"
+             ; "commit=Send%20email"
+             ]
+             @ directly_data
+             @ copied_data
+             @ blindcopied_data)
+        in
+        let headers =
+          Cohttp.Header.of_list
+            [ "Content-Type", "application/x-www-form-urlencoded;charset=UTF-8"
+            ; "Cookie", Args.cfg.cookie
+            ; "X-CSRF-Token", Args.cfg.csrf
+            ]
+        in
+        let resp, body =
+          Cohttp_lwt_unix.Client.post
+            ~headers
+            ~body:(Cohttp_lwt.Body.of_string form_data)
+            uri
+          |> Lwt_main.run
+        in
+        let code = Cohttp.Response.status resp |> Cohttp.Code.code_of_status in
+        if code = 302
+        then Ok (Cohttp_lwt.Body.to_string body |> Lwt_main.run)
+        else Error (Printf.sprintf "failed to send: HTTP %d" code)
+      in
+      match e.subject, e.content, e.directly with
+      | Some subject, Some content, Some directly ->
+        let copied = Option.value ~default:[] e.copied in
+        let blindcopied = Option.value ~default:[] e.blindcopied in
+        fire ~subject ~content ~directly ~copied ~blindcopied
+      | _ -> Error "missing required fields (subject/content/recipient)"
+    ;;
   end
 end
