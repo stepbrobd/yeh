@@ -4,58 +4,71 @@
     parts.url = "github:hercules-ci/flake-parts";
     parts.inputs.nixpkgs-lib.follows = "nixpkgs";
     systems.url = "github:nix-systems/default";
+    pyp.url = "github:pyproject-nix/pyproject.nix";
+    pyp.inputs.nixpkgs.follows = "nixpkgs";
+    pypbs.url = "github:pyproject-nix/build-system-pkgs";
+    pypbs.inputs.pyproject-nix.follows = "pyp";
+    pypbs.inputs.uv2nix.follows = "pypuv";
+    pypbs.inputs.nixpkgs.follows = "nixpkgs";
+    pypuv.url = "github:pyproject-nix/uv2nix";
+    pypuv.inputs.nixpkgs.follows = "nixpkgs";
+    pypuv.inputs.pyproject-nix.follows = "pyp";
   };
 
   outputs = inputs: inputs.parts.lib.mkFlake { inherit inputs; } {
     systems = import inputs.systems;
 
-    perSystem = { pkgs, system, ... }: {
-      _module.args = {
-        lib = with inputs; builtins // nixpkgs.lib // parts.lib;
-        pkgs = import inputs.nixpkgs {
-          inherit system;
-          overlays = [
-            (final: prev: {
-              ocamlPackages = prev.ocamlPackages.overrideScope (_: prev': {
-                mirage-crypto-rng = prev'.mirage-crypto-rng.overrideAttrs (_: {
-                  # https://github.com/mirage/mirage-crypto/issues/216
-                  # https://github.com/nixos/nixpkgs/pull/356634
-                  doCheck = !(with final.stdenv; isDarwin && isAarch64);
-                });
-              });
-            })
+    perSystem = { lib, pkgs, ... }:
+      let
+        python = pkgs.python314;
+        workspace = inputs.pypuv.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
+        pythonPackages = (pkgs.callPackage inputs.pyp.build.packages { inherit python; }).overrideScope (
+          lib.composeManyExtensions [
+            inputs.pypbs.overlays.wheel
+            (workspace.mkPyprojectOverlay { sourcePreference = "wheel"; })
+          ]);
+      in
+      {
+        packages.default = pythonPackages.mkVirtualEnv
+          (let meta = lib.importTOML ./pyproject.toml; in with meta.project; "${name}-${version}")
+          workspace.deps.default;
+
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
+            mypy
+            python
+            python.pkgs.venvShellHook
+            ruff
+            uv
           ];
+
+          venvDir = "./.venv";
+          preShellHook = "uv venv $venvDir";
+          postShellHook = "uv sync";
+
+          UV_PYTHON = python.interpreter;
+          UV_PYTHON_DOWNLOADS = "never";
+          UV_VENV_CLEAR = true;
         };
-      };
 
-      devShells.default = pkgs.mkShell {
-        packages = with pkgs; [
-          dune_3
-          ocaml
-          ocamlformat
-          sops
-        ] ++ (with ocamlPackages; [
-          angstrom
-          cohttp
-          cohttp-lwt
-          cohttp-lwt-unix
-          core
-          lambdasoup
-          lwt
-          mrmime
-          ocaml-print-intf
-          odoc
-          ptime
-          uri
-          utop
-        ]);
+        formatter = pkgs.writeShellScriptBin "formatter" ''
+          set -eoux pipefail
+          shopt -s globstar
+          root="$PWD"
+          while [[ ! -f "$root/.git/index" ]]; do
+            if [[ "$root" == "/" ]]; then
+              exit 1
+            fi
+            root="$(dirname "$root")"
+          done
+          pushd "$root" > /dev/null
+          ${lib.getExe pkgs.deno} fmt readme.md
+          ${lib.getExe pkgs.mypy} --disable-error-code=import .
+          ${lib.getExe pkgs.nixpkgs-fmt} .
+          ${lib.getExe pkgs.ruff} check --fix --unsafe-fixes --preview .
+          ${lib.getExe pkgs.taplo} format pyproject.toml
+          popd
+        '';
       };
-
-      formatter = pkgs.writeShellScriptBin "formatter" ''
-        ${pkgs.deno}/bin/deno fmt readme.md
-        ${pkgs.dune_3}/bin/dune fmt
-        ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt .
-      '';
-    };
   };
 }

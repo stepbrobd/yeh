@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yeh"
+version = "2026.228.0"
+description = "imap/smtp proxy for hey.com"
+readme = "readme.md"
+license = { file = "license.txt" }
+authors = [{ name = "Yifei Sun", email = "ysun@hey.com" }]
+requires-python = ">=3.14"
+dependencies = [
+  "beautifulsoup4",
+  "click",
+  "httpx",
+  "platformdirs",
+  "pyotp",
+  "selenium",
+  "textual",
+]
+
+[project.scripts]
+yeh = "yeh.cli:cli"
+
+[project.urls]
+Documentation = "https://github.com/stepbrobd/yeh"
+Repository = "https://github.com/stepbrobd/yeh"
+Issues = "https://github.com/stepbrobd/yeh/issues"
+
+[tool.ruff.lint]
+isort.known-first-party = ["yeh"]

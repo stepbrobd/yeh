@@ -1,5 +1,0 @@
-(lang dune 3.17)
-(generate_opam_files false)
-(name yeh)
-(source (github stepbrobd/yeh))
-(license MIT)
