@@ -1,133 +1,225 @@
 # YEH <-> HEY
 
-Roadmap:
+`yeh` is a Python CLI that authenticates to HEY web (with Selenium), fetches
+mailbox pages, and persists thread/message content for local tooling.
 
-HEY server renders all emails, they dont do client side fetching, except for
-~~keeping a websocket connection open for new incoming emails and sending
-emails~~.
+Current scope:
 
-Users/potential contributors: copy the session token (in cookie) from a browser
-with HEY logged in and export environment variable for testing and deployment. I
-plan to implement the IMAP/SMTP proxy to be a single tenant server, i.e. you'll
-need two secrets to run a deployment (one for accessing HEY, one to login from
-your email client).
+- Click-based CLI.
+- Config/env account resolution.
+- Selenium login with TOTP fallback.
+- Session persistence in sqlite.
+- Textual inbox listing UI.
+- Automatic re-auth when a fetch detects expired auth.
+- Topic/message sync into sqlite via HEY plaintext message endpoints.
 
-Roadmap:
+This project is still pre-IMAP/SMTP server; it currently focuses on reliable HEY
+web auth/session handling and mailbox fetch/parsing.
 
-- [x] config parsing
-- [x] can fetch raw html from imbox, drafts, sent, etc
-  - [x] synchronously
-  - [ ] async request with lwt?
-- [ ] ~~websocket connection for sending emails~~
-- [ ] smtp server (easy? state machine like)
-- [ ] imap server (hard? use sqlite to prevent fetching all emails over and
-      over)
-- [ ] nixos module
+## Installation
 
-IMAP:
-
-- mailbox mapping, i.e. imbox -> inbox, collections -> folders, etc
-- do html parsing, get message link, forward the raw email (from view original)
-  to clients
-- ~~keep websocket connection open for new incoming emails (or just poll every x
-  seconds?)~~
-
-SMTP:
-
-- simple state machine, allow concurrent sends
-- recieve commands from smtp clients and relay to hey's web interface sending
-  logic (should be a simple http request)
-
-Conventional commit:
-
-- [bin|lib|doc|...]/<module>: regular code changes
-- git: git related
-- nix: nix related
-- ci: automation stuff
-- treewide: changes that affect multiple directories
-- misc: anything else
-
-## Notes
-
-After getting HTML from Imbox or other top level folders (under /topics/*),
-`#main-content > div > div > div > section` contains a list of all summary cards
-of emails in article tags (avatar, subject, snippet, time), and an a tag at the
-very end containing the link to next page
-(`#main-content > div > div > div > section > a`)
-
-`https://app.hey.com/messages/<id>.text` have the full email content (with
-headers)
-
-Maybe read from response header
-(`x-ratelimit: {"name":"General","period":60,"limit":1000,"remaining":998,"until":"2025-02-22T04:22:00Z"}`)
-to prevent getting rate limited?
-
-Emails in screener will be put into Everything, no need to parse separately.
-
-Topics are email threads, entries are emails in thread, different IDs.
-
-Is parsing even needed after getting `<domain>/messages/<id>.text`? Directly
-feed to IMAP downstream? Attachments are included in multipart?
-
-To send email, need 2 CSRF tokens and HEY session token, and POST the form data
-to submission endpoint:
-
-```
-# sender info
-acting_sender_id=<HEY account ID>
-acting_sender_email=<local part>@hey.com
-
-# recipient info (if multiple, repeat the key)
-entry[addressed][directly][]=local@example.com
-entry[addressed][copied][]=local@example.com
-entry[addressed][blindcopied][]=local@example.com
-
-# email
-message[subject]=Test
-message[content]=<div></div>
-
-# metadata
-_method=post
-commit=Send email
-autodraft=false
-entry[status]=drafted
-entry[scheduled_delivery]=false
-entry[scheduled_delivery_at_date]=<YYYY-MM-DD>
-entry[scheduled_delivery_at_hour]=<0-24>
-entry[scheduled_bubble_up]=false
-entry[scheduled_bubble_up_on]=<YYYY-MM-DD>
-```
+Requires Python `>=3.14` and `uv`.
 
 ```sh
-cookie=$(sops decrypt --extract '["cookie"]' .env.yaml)
-csrf=$(sops decrypt --extract '["csrf"]' .env.yaml)
-asid=$(sops decrypt --extract '["asid"]' .env.yaml)
-user=$(sops decrypt --extract '["user"]' .env.yaml)
-
-curl -i "https://app.hey.com/messages" \
-  -X 'POST' \
-  -H 'Content-Type: application/x-www-form-urlencoded;charset=UTF-8' \
-  -H "Cookie: $cookie" \
-  -H "X-CSRF-Token: $csrf" \
-  --data-urlencode "acting_sender_id=$asid" \
-  --data-urlencode "acting_sender_email=$user" \
-  --data-urlencode 'entry[addressed][directly][]=<test email address>' \
-  --data-urlencode 'message[subject]=test subject' \
-  --data-urlencode 'message[content]=sup this is some test content' \
-  --data-urlencode '_method=POST' \
-  --data-urlencode 'commit=Send email'
+uv sync
+uv run python -m yeh --help
 ```
 
-For the 2 CSRF tokens, one must be in the cookie, another in request header
-(X-CSRF-Token), I assume the one in header is from Cloudflare and the one in
-cookie is from HEY.
+Chrome is required for Selenium auth (ChromeDriver is managed by Selenium
+Manager automatically).
 
-Don't need websokect for sending, and also don't need to check emails, just poll
+## Commands
+
+Public end-user commands:
+
+- `yeh config init`
+- `yeh config show`
+- `yeh email tui`
+- `yeh email import <mbox_path>`
+- `yeh email refresh`
+- `yeh email index`
+- `yeh server`
+
+Equivalent module form:
+
+```sh
+uv run python -m yeh config show
+uv run python -m yeh email tui
+uv run python -m yeh email import /path/to/HEY-export.mbox
+uv run python -m yeh email refresh --mailbox everything
+uv run python -m yeh email index
+uv run python -m yeh server --tls-cert-file ./cert.pem --tls-key-file ./key.pem
+```
+
+Start SMTPS + IMAPS listeners (implicit TLS, logs to stdout):
+
+```sh
+uv run python -m yeh server \
+  --smtps-host 127.0.0.1 --smtps-port 8465 \
+  --imaps-host 127.0.0.1 --imaps-port 8993 \
+  --imap-sync-min-interval-seconds 30 \
+  --imap-sync-max-pages 3 \
+  --imap-sync-index-pages-per-mailbox 3 \
+  --tls-cert-file ./cert.pem --tls-key-file ./key.pem
+```
+
+IMAP-triggered sync behavior:
+
+- `NOOP`, `CHECK`, `SELECT`, and `STATUS` can trigger bounded background sync.
+- Sync fetches latest topics + message content (`refresh --deep`) and mailbox
+  membership reindex (`index`) with cooldown via
+  `--imap-sync-min-interval-seconds`.
+
+Auth notes:
+
+- `mta_passwd` is required in config/env for SMTP/IMAP login.
+- Username is your configured `hey_email`.
+
+## Configuration
+
+Config path uses XDG defaults:
+
+- Config: `XDG_CONFIG_HOME/yeh/config.toml`
+- Data: `XDG_DATA_HOME/yeh/`
+- Session DB: `XDG_DATA_HOME/yeh/<hey_email>.sqlite3`
+
+Override config file path:
+
+- `YEH_CONFIG_PATH=/path/to/config.toml`
+
+Config format:
+
+```toml
+[[accounts]]
+hey_email = "you@hey.com"
+hey_passwd = "your-password"
+hey_totp = "BASE32_TOTP_SECRET" # optional unless account requires TOTP
+mta_passwd = "client-password"
+```
+
+Supported env vars:
+
+- `YEH_HEY_EMAIL`
+- `YEH_HEY_PASSWD`
+- `YEH_HEY_TOTP`
+- `YEH_MTA_PASSWD`
+- `YEH_HEY_HOST` (default: `app.hey.com`)
+
+Precedence is:
+
+1. CLI flags
+2. env vars
+3. config file
+
+Notes:
+
+- `config init` creates the config file in the resolved config directory and
+  creates parent directories when needed.
+- `config show` reads and prints the resolved config file.
+
+## Authentication Model
+
+Authentication is designed to be transparent to users:
+
+- `email refresh`/`email index` first try existing saved session cookies.
+- If there is no session, they log in automatically.
+- If a fetch redirects to `/sign_in`, they re-authenticate and retry.
+- Session state (cookies, csrf token, last URL) is refreshed and persisted after
+  successful fetches.
+
+The implementation minimizes re-auth while preserving correctness by preferring
+session reuse and only logging in again on explicit auth failure.
+
+## Email TUI (Textual)
+
+Launch the local database UI:
+
+```sh
+uv run python -m yeh email tui
+```
+
+Key bindings:
+
+- `q`: quit
+- `r`: refresh database view
+- `[`: previous mailbox filter
+- `]`: next mailbox filter
+- `a`: show all mailboxes
+- `p`: previous page
+- `n`: next page
+
+For HTTP-to-local synchronization helpers:
+
+- `email refresh` updates topic/message data for one mailbox (or `everything`)
+  and defaults to bounded, metadata-only refresh.
+- `email index` scans all mailbox routes and records mailbox memberships for
+  each topic without deep message refetch.
+
+Recommended refresh flow:
+
+- Fast metadata refresh:
+  `uv run python -m yeh email refresh --mailbox everything`
+- Deep message refresh:
+  `uv run python -m yeh email refresh --mailbox everything --deep`
+- Larger index pass:
+  `uv run python -m yeh email index --max-pages-per-mailbox 100`
+
+Parsed fields per thread:
+
+- sender
+- subject
+- snippet
+- time
+- topic URL
+
+During list/refresh/pagination, each fetched topic is synchronized to sqlite:
+
+- Topic records are stored in `topics`.
+- Message records are stored in `messages`.
+- Message content is fetched from `/messages/<id>.text` and refreshed when the
+  message content changes.
+
+Import HEY export `.mbox` into sqlite:
+
+```sh
+uv run python -m yeh email import ./HEY-emails-you@hey.com.mbox
+```
+
+Options:
+
+- `--mailbox` (default: `everything`) sets mailbox association for imported
+  topics.
+- `--hey-email` selects account/db when multiple accounts are configured.
+
+Supported mailbox keys:
+
+- `imbox`
+- `feedbox`
+- `paper_trail`
+- `drafts`
+- `sent`
+- `previously_seen`
+- `screened_out`
+- `spam`
+- `trash`
+- `everything`
+
+## Development
+
+Formatting/linting/checks:
+
+```sh
+nix fmt
+uv run ruff check yeh
+uv run ruff format --check yeh
+```
+
+## Roadmap
+
+- Improve mailbox parsing coverage across HEY views.
+- Add robust send flow support.
+- Build IMAP/SMTP proxy layers on top of persisted session/mailbox primitives.
 
 ## License
 
-Licensed under the [MIT License](license.txt), not sure if this is a violation
-of HEY's TOS, use at your own risk.
-
-I'll keep working on this and maintain this if they don't provide official
-IMAP/SMTP support (outrageous for a paid email service).
+Licensed under the [MIT License](license.txt). Use at your own risk.
