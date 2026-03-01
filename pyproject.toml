@@ -30,3 +30,9 @@ Issues = "https://github.com/stepbrobd/yeh/issues"
 
 [tool.ruff.lint]
 isort.known-first-party = ["yeh"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest"]
